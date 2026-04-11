@@ -1,0 +1,186 @@
+{
+  "openapi": "3.0.3",
+  "info": {
+    "title": "TakasumiBOT API",
+    "description": "TakasumiBOTの公開API",
+    "version": "3.0.0-beta"
+  },
+  "paths": {
+    "/v3/gift/{id}": {
+      "get": {
+        "description": "指定したIDのギフト情報を取得します。パラメータ: id（ギフトID）",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "operationId": "getV3GiftById"
+      }
+    },
+    "/v3/history/{id}": {
+      "get": {
+        "description": "指定したユーザーIDの取引履歴を返します。",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "description": "DiscordユーザーID",
+              "type": "string"
+            }
+          }
+        ],
+        "operationId": "getV3HistoryById"
+      }
+    },
+    "/v3/profile/{id}": {
+      "get": {
+        "description": "指定したユーザーIDのプロフィール情報（資産、チップ、職業）を返します。",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "description": "DiscordユーザーID",
+              "type": "string"
+            }
+          }
+        ],
+        "operationId": "getV3ProfileById"
+      }
+    },
+    "/v3/ranking/": {
+      "get": {
+        "description": "資産ランキング上位50名の情報を返します。パラメータは不要です。",
+        "operationId": "getV3Ranking"
+      }
+    },
+    "/v3/companylist/": {
+      "get": {
+        "description": "全ての会社のリストを返します。パラメータは不要です。",
+        "operationId": "getV3Companylist"
+      }
+    },
+    "/v3/company/{id}": {
+      "get": {
+        "description": "指定したID（会社IDまたはオーナーID）に対応する会社情報を返します。",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "description": "会社ID（10文字）またはオーナーのDiscordユーザーID",
+              "type": "string"
+            }
+          }
+        ],
+        "operationId": "getV3CompanyById"
+      }
+    },
+    "/v3/stock/": {
+      "get": {
+        "description": "全ての株式情報（会社名、配当など）を返します。パラメータは不要です。",
+        "operationId": "getV3Stock"
+      }
+    },
+    "/v3/discord/usersearch/{name}": {
+      "get": {
+        "description": "指定したユーザー名のキャッシュされたDiscordユーザー情報を返します。",
+        "parameters": [
+          {
+            "name": "name",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "description": "Discordユーザー名",
+              "type": "string"
+            }
+          }
+        ],
+        "operationId": "getV3DiscordUsersearchByName"
+      }
+    },
+    "/v3/companyHistory/{id}": {
+      "get": {
+        "description": "指定した会社IDの取引履歴を返します。",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "description": "会社ID",
+              "type": "string"
+            }
+          }
+        ],
+        "operationId": "getV3CompanyHistoryById"
+      }
+    },
+    "/v3/tax/": {
+      "get": {
+        "description": "全ての税率や税区分の情報を返します。パラメータは不要です。",
+        "operationId": "getV3Tax"
+      }
+    },
+    "/v3/shard/": {
+      "get": {
+        "description": "シャードの情報を返します。パラメータは不要。",
+        "operationId": "getV3Shard"
+      }
+    },
+    "/v3/status/": {
+      "get": {
+        "description": "システムログ情報を返します。パラメータは不要です。",
+        "operationId": "getV3Status"
+      }
+    },
+    "/v3/guildBoard/invite/{id}": {
+      "get": {
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "operationId": "getV3GuildBoardInviteById"
+      }
+    },
+    "/v3/statistics/": {
+      "get": {
+        "description": "統計情報を返します。パラメータは不要です。",
+        "operationId": "getV3Statistics"
+      }
+    },
+    "/v3/realtime/": {
+      "ws": {
+        "parameters": [
+          {
+            "name": "userId",
+            "in": "query",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "operationId": "wsV3Realtime"
+      }
+    }
+  },
+  "components": {
+    "schemas": {}
+  }
+}
