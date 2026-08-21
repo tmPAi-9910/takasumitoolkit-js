@@ -21,7 +21,9 @@
             "required": true,
             "schema": {
               "type": "string",
-              "description": "ギフトコード（A-Za-z0-9 10文字）"
+              "description": "ギフトコード（A-Za-z0-9 10文字）",
+              "maxLength": 10,
+              "minLength": 10
             }
           }
         ],
@@ -598,7 +600,8 @@
           },
           "id": {
             "type": "string",
-            "description": "株式コード"
+            "description": "株式コード",
+            "enum": ["JTTI", "TENOMU", "KAKAPO", "TOMOTA", "NITIMOTO", "DEEDLE", "RIPPLE", "NIMURA", "TAKASUMI", "KENTAI"]
           },
           "description": {
             "type": "string"
