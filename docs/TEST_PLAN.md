@@ -105,8 +105,12 @@ const mockLogger = {
 
 - [ ] 正常系: StockEntry[] を返す (bigint含む q7)
 - [ ] zod 検証失敗で ParseError
-- [ ] TTL60秒キャッシュで2回目fetchが呼ばれない (q13)
+- [ ] キャッシュ無効 (既定) では2回連続呼び出しで fetch が2回呼ばれる
+- [ ] キャッシュ有効 (`{}`) で2回目fetchが呼ばれない (q13)
 - [ ] TTL経過後は再fetchされる
+- [ ] `ttlMs` カスタム値が反映される
+- [ ] キャッシュはクライアントインスタンスごとに独立
+- [ ] 同時未ヒット時は single-flight で fetch が1回
 
 #### getStockInfoById.test.ts
 
@@ -240,6 +244,21 @@ const mockLogger = {
 - [ ] 新しい順ソート (末尾が最新確定 q1)
 - [ ] history が配列でない、数値/bigint以外含むで ValidationError
 - [ ] bigint対応 (q7)
+
+### 8-bis. bigint / JSON パース
+
+- [ ] `parseJsonWithBigInt` が安全整数超えの整数を bigint として返す
+- [ ] 小数・指数表記・文字列・bool・null は `JSON.parse` と同等
+- [ ] 不正 JSON で `SyntaxError`
+- [ ] レスポンス経由でも精度が落ちない (`response.text()` 方式)
+- [ ] int32 フィールドは number のまま
+
+### 8-ter. OpenAPI 整合性
+
+- [ ] 実装が使う path が全て OpenAPI `paths` に存在する
+- [ ] OpenAPI の HTTP path (WS 除く) が全て実装に含まれる
+- [ ] `/v3/realtime/` が実装に含まれない
+- [ ] 公開型と生成型のキー集合が一致する (型レベル)
 
 ### 9. 統合テスト (optional)
 

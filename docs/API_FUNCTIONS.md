@@ -160,7 +160,7 @@ OpenAPI `TakasumiBOT-OpenAPI-Document.json` を唯一の正として、HTTP エ�
 - `openapi-typescript` で生成された型を `components.schemas` から import
 - 例:
   ```ts
-  import type { components } from './generated/api';
+  import type { components } from './generated/openapi';
   type GiftResponse = components['schemas']['GiftResponse'];
   ```
 - 配列型は `components['schemas']['HistoryEntry'][]` のように表現

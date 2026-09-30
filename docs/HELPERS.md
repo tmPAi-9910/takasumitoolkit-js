@@ -39,7 +39,8 @@ function truncate(text: string, maxLength: number, options?: { ellipsis?: string
 - 動作:
   - `text.length <= maxLength` ならそのまま返す
   - 超える場合、`text.slice(0, maxLength - ellipsis.length) + ellipsis` (例: maxLength5, ellipsis'...'なら 'ab...' =2文字+'...'で5)
-  - `maxLength < ellipsis.length` の場合は `text.slice(0, maxLength)` (ellipsis付けない)
+  - `maxLength <= ellipsis.length` の場合は `text.slice(0, maxLength)` (ellipsis付けない)
+    - 例: `truncate('hello world', 3)` → `'hel'`、`truncate('hello world', 4)` → `'h...'`
 - エラー:
   - `text` が string でない → ValidationError
   - `maxLength` が負、NaN、非整数 → ValidationError
@@ -108,7 +109,7 @@ function toMarkdownTable(rows: TableRow[], options?: { headers?: string[]; align
 - 戻り値: `string` — Markdown テーブル文字列
 - 動作:
   - ヘッダ行: `| col1 | col2 |`
-  - セパレータ行: `| --- | --- |` または `| :--- | :---: | ---: |` (alignに応じて)
+  - セパレータ行: `align` 未指定時は `| --- | --- |`。`align` 指定時は左 `:---` / 中央 `:---:` / 右 `---:` (既定 align は left だが、未指定時は素の `---`)
   - データ行: 各行を `| val1 | val2 |` 形式に
   - 値は `String(value)` で文字列化、null/undefinedは空文字、bigintも文字列化
   - Markdownエスケープ (q12確定): `|` → `\|`, 改行 `\n` → `<br>`
@@ -172,8 +173,8 @@ function formatTimestamp(value: string | number | Date | bigint, options?: Forma
 ```
 
 - 引数:
-  - `value`: string(ISO8601), number(ms), Date, bigint(ms)
-  - `options.format`: 'iso'既定ならISO文字列、'locale'ならlocale文字列、'relative'なら相対時間
+  - `value`: string(ISO8601), number(ms), Date, bigint(ms) (bigint は Number に変換して解釈)
+  - `options.format`: 'iso'既定ならISO文字列、'locale'ならlocale文字列、'relative'なら相対時間 ('custom' は書式仕様が未定義のため未実装)
   - `options.locale`: 既定 `ja-JP` (q9確定)
 - 戻り値: `string`
 - 動作:
@@ -186,7 +187,7 @@ function formatTimestamp(value: string | number | Date | bigint, options?: Forma
 - 例:
   ```ts
   formatTimestamp('2024-01-01T00:00:00Z') // '2024-01-01T00:00:00.000Z'
-  formatTimestamp(Date.now(), { format: 'relative', locale: 'ja-JP' }) // 'たった今'
+  formatTimestamp(Date.now(), { format: 'relative', locale: 'ja-JP' }) // '今' (Intl.RelativeTimeFormat の出力)
   ```
 
 ### 7. paginate(items, page, pageSize) (q10解決: empty)

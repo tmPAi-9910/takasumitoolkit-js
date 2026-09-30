@@ -1,0 +1,9 @@
+TakasumiBOT-OpenAPI-Document.json
+dist
+coverage
+node_modules
+src/generated/openapi.ts
+package-lock.json
+
+# Existing design documents are kept verbatim (only semantic edits are allowed).
+docs/

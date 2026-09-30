@@ -1,8 +1,8 @@
-# takasumibot-toolkit 仕様書 (SPEC)
+# takasumibot-kit 仕様書 (SPEC)
 
 ## 1. パッケージ概要・目標
 
-- パッケージ名: `takasumibot-toolkit`
+- パッケージ名: `takasumibot-kit`
 - 目的: `TakasumiBOT-OpenAPI-Document.json` (v3.0.0-beta) を唯一の正とする、TakasumiBOT 公開 API の TypeScript クライアント SDK。
 - 目標:
   - 型安全 (TypeScript strict, `any` 原則禁止)
@@ -24,7 +24,7 @@
   - runtime: 原則なし。例外として `zod` のみ許可 (レスポンス検証)
   - dev: `openapi-typescript` (OpenAPI → TypeScript 型生成), `tsup` (ESM+CJS+dts), `vitest`, `eslint`, `prettier`, `@types/node` 等
 - Lint/Format: ESLint + Prettier
-- 型生成: `openapi-typescript` で `components.schemas` を元に型を生成し、`src/generated/` 等に配置する想定。生成された型は直接公開せず、SDK の公開型としてラップする。
+- 型生成: `openapi-typescript` で `components.schemas` を元に型を生成し、`src/generated/openapi.ts` に配置する (`npm run generate:types`)。生成された型は直接公開せず、zod スキーマから推論した公開型としてラップする。
 - `any` 原則禁止: `unknown` またはジェネリクスで代替。やむなく使う場合は `eslint-disable` コメントと理由を併記する方針を SPEC に明記する。
 
 ## 3. baseUrl 解決ルール
@@ -60,10 +60,12 @@ type KitClientConfig = {
   retry?: Partial<RetryConfig>;
   fetch?: typeof globalThis.fetch;
   logger?: Logger;
+  stockCache?: false | { ttlMs?: number }; // 既定は無効
 };
 
 type KitClient = {
   readonly baseUrl: string;
+  readonly helpers: Helpers; // 純粋関数の名前空間 (named export でも提供)
   // HTTP エンドポイント関数
   getGiftInfo(id: string): Promise<GiftResponse>;
   getTaxInfo(): Promise<TaxResponse>;
@@ -81,8 +83,8 @@ type KitClient = {
   // Stock 導出 (解決済み: q1,q2,q3,q13)
   getStock(): StockBuilder;
   getStockInfoById(id: string): Promise<StockEntry>;
-  getStockPriceById(id: string): Promise<number | null>; // 空配列時は null を返す (q3解決)
-  getStockHistoryById(id: string, options?: { limit?: number }): Promise<number[]>;
+  getStockPriceById(id: string): Promise<bigint | null>; // 空配列時は null を返す (q3解決)
+  getStockHistoryById(id: string, options?: { limit?: number }): Promise<bigint[]>; // 新しい順
 };
 
 function createKitClient(config?: KitClientConfig): KitClient;
@@ -113,6 +115,11 @@ function createKitClient(config?: KitClientConfig): KitClient;
   };
   ```
   - 全フィールド optional。未指定なら no-op logger を使用。
+- `stockCache?: false | { ttlMs?: number }` — `GET /v3/stock/` の結果をクライアントインスタンス単位でキャッシュするかどうか
+  - **既定は無効**: 指定しない限り毎回リクエストを行う
+  - `{}` または `{ ttlMs }` で有効化。`ttlMs` 省略時は 60_000 (60秒)
+  - `ttlMs` が 0 以下 / NaN / 非数値の場合は `TakasumiBotKitConfigError` (「無効扱い」にはしない)
+  - 同時未ヒット時は single-flight (同一の in-flight Promise を共有) でリクエストをまとめる
 
 ### 4.3 既定値
 
@@ -125,6 +132,7 @@ function createKitClient(config?: KitClientConfig): KitClient;
 - `headers`: {}
 - `fetch`: globalThis.fetch
 - `logger`: no-op
+- `stockCache`: `false` (キャッシュ無効)
 - `baseUrl`: 上記解決ルール参照
 
 ### 4.4 バリデーション
@@ -135,6 +143,7 @@ function createKitClient(config?: KitClientConfig): KitClient;
 - `initialDelayMs > maxDelayMs` の場合 → `TakasumiBotKitConfigError` (解決済み: q6)
 - `headers` がオブジェクトでない → `TakasumiBotKitConfigError`
 - `fetch` が関数でない → `TakasumiBotKitConfigError`
+- `stockCache.ttlMs` が 0 以下、NaN、非数値 → `TakasumiBotKitConfigError`
 
 ## 5. 全 HTTP エンドポイントと関数の対応
 
@@ -181,7 +190,7 @@ OpenAPI には `/v3/stock/{id}` や price/history 用の個別 HTTP エンドポ
 - `StockEntry.prices: number[]` の並び順は「配列末尾が最新」(昇順) と確定 (q1: asc)。戻り値は新しい順 (降順, newest-first) にソートして返すため `prices.slice(-n).reverse()` を行う。例: `[100,101,102]` → 102が最新、history全件は `[102,101,100]`。
 - `id` が見つからない場合は `TakasumiBotKitValidationError` with `code: 'STOCK_NOT_FOUND'` と確定 (q2: validation)。リトライ対象外。
 - `prices` が空配列の場合の `getStockPriceById` は `null` を返すと確定 (q3: return_null)。型は `Promise<number | null>` に変更。
-- `getStock().id(id)` ビルダーは `getStockList()` を内部で呼び出すが、TTL 60秒キャッシュを導入 (q13: ttl_60)。オプションで有効化し、既定でキャッシュあり、連続呼び出しでHTTPリクエストを削減。
+- `getStock().id(id)` ビルダーは `getStockList()` を内部で呼び出す。キャッシュは `basicConfig.stockCache` で**オプション有効化**し、既定では無効 (q13 は実装時に「既定無効・オプション有効」へ確定)。有効化した場合の既定 TTL は 60秒。
 - Gift ID は厳密な正規表現 `/^[A-Za-z0-9]{10}$/` でバリデーション (q16: strict_regex)。
 
 ## 7. エラー方針 (ERRORS.md への参照)
@@ -230,6 +239,11 @@ OpenAPI には `/v3/stock/{id}` や price/history 用の個別 HTTP エンドポ
   - 配列レスポンスは `z.array(Schema)` で検証
   - パースエラー時は zod の issues を `cause` に含め、ログに出力
   - 5xx時のパース失敗は `HttpError` 優先 (q17: http_priority 解決)。2xx時のみ `ParseError`
+  - **bigint パース方式 A (実装時に確定)**: `response.json()` は使わない
+    1. `response.text()` で本文を取得
+    2. 独自 JSON スキャナ (`src/internal/json.ts`) でパース。整数リテラルのうち安全整数範囲を超えるものは `bigint`、それ以外の整数・小数は `number`
+    3. その結果を zod で検証 (`int64Schema` は `bigint | number | 数値文字列` を `bigint` に、`int32Schema` は `number` に変換)
+  - **required の扱い (実装時に確定)**: OpenAPI は `required` を宣言していないが、本 SPEC §14 の公開型イメージに従い、ドキュメント化された全プロパティを required として検証する (`nullable: true` は required かつ `null` 許容)。未知フィールドは `.passthrough()` で保持するため API がフィールドを追加しても壊れない
 - 型生成と zod の二重管理を避けるため、`zod` から型を推論する (`z.infer<>`) か、openapi-typescript 型と zod 型の整合性をテストで担保する。
 
 ## 10. ヘルパー方針 (HELPERS.md への参照)
@@ -303,7 +317,7 @@ type GiftResponse = {
   userId: string;
   status: 'received' | 'unused';
   receiverId: string | null;
-  amount: number;
+  amount: bigint; // int64 → bigint (q7解決)
   boughtAt: string | null;
   createdAt: string;
 };
