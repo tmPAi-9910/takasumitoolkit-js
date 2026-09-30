@@ -31,7 +31,7 @@ type StockEntry = {
 
 - 既存の HTTP 関数。`GET /v3/stock/` を呼び出し `StockEntry[]` を返す
 - Stock 導出の基礎となる
-- TTL 60秒キャッシュを内部で持つ (q13解決)。`createKitClient` 内部で `stockListCache: { data, expiresAt }` を保持し、連続呼び出しではキャッシュを返す。キャッシュ無効化は TTL 経過または明示的オプション (将来拡張) で行う。
+- キャッシュ (q13) は **既定で無効**。`createKitClient({ stockCache: {...} })` を渡したときだけ `createKitClient` 内部の `stockListCache: { data, expiresAt }` が使われ、TTL 内の連続呼び出しで再リクエストを行わない。詳細は「キャッシュ戦略」を参照。
 
 ### 2. getStockInfoById(id: string)
 
@@ -128,7 +128,7 @@ function getStock(): StockBuilder;
   - `.id(id)` で id を束縛し、StockIdBuilder を返す。ここでも HTTP リクエストは行わない (lazy)
   - `.info()`, `.price()`, `.history()` 呼び出し時に初めて `getStockList()` (キャッシュ利用) → 検索 → 加工が行われる
   - 各メソッドは上記個別関数と同等の動作をする
-  - TTL 60秒キャッシュにより、`info()` と `price()` を連続呼び出ししても 1回のみ HTTP (q13解決)
+  - `stockCache` 有効時は TTL 内の `info()` / `price()` 連続呼び出しで HTTP は 1回のみ (q13解決)
 
 - チェーン例:
   ```ts
@@ -143,20 +143,28 @@ function getStock(): StockBuilder;
   - ビルダーは immutable。`id()` 呼び出しごとに新しい StockIdBuilder を生成
   - `getStock().id(id)` の id バリデーションは `id()` 時点で ValidationError を throw (fail fast)
 
-## キャッシュ戦略 (q13解決: ttl_60)
+## キャッシュ戦略 (q13: ttl_60 / 実装時に「既定無効・オプション有効」へ確定)
 
-- TTL 60秒キャッシュを導入
+- **既定はキャッシュ無効**。`basicConfig.stockCache` を指定した場合のみ有効
+  ```ts
+  type StockCacheConfig = { ttlMs?: number }; // 省略時 60_000
+  createKitClient({ stockCache: false });              // 無効 (既定)
+  createKitClient({ stockCache: {} });                 // 有効・TTL 60秒
+  createKitClient({ stockCache: { ttlMs: 30_000 } });  // 有効・TTL 30秒
+  ```
 - 実装イメージ:
   ```ts
   type StockCache = {
     data: StockEntry[];
-    expiresAt: number; // Date.now() + 60000
+    expiresAt: number; // Date.now() + ttlMs
   };
   ```
-- `getStockList()` 呼び出し時、キャッシュが有効 (expiresAt > now) ならキャッシュを返す
+- 有効時、`getStockList()` 呼び出し時にキャッシュが有効 (expiresAt > now) ならキャッシュを返す
 - TTL 経過で再取得
-- 将来拡張: `createKitClient({ cache: { stockTtlMs: number } })` で TTL カスタマイズ可能にする案もあるが、現行は 60秒固定で実装
-- キャッシュはクライアントインスタンスごとに独立
+- `ttlMs` が 0 以下 / NaN / 非数値の場合は `TakasumiBotKitConfigError` を throw (「無効扱い」にはしない)
+- 同時未ヒット時は single-flight: 同一の in-flight Promise を共有し、リクエストを 1回にまとめる (任意実装だが採用)
+- キャッシュはクライアントインスタンスごとに独立 (他インスタンスと共有しない)
+- スコープ: `getStockList()` および Stock ビルダー / `getStockInfoById` 系列が内部で使う一覧取得
 
 ## バリデーション
 
@@ -189,7 +197,9 @@ function getStock(): StockBuilder;
 ## テスト観点 (解決済み反映)
 
 - getStockList() のモックが呼ばれ、新規 HTTP リクエスト (例: /v3/stock/JTTI) が発生しないこと
-- キャッシュ: 2回連続呼び出しで fetch が1回のみ呼ばれる (TTL内)
+- キャッシュ無効 (既定): 2回連続呼び出しで fetch が2回呼ばれる
+- キャッシュ有効: 2回連続呼び出しで fetch が1回のみ呼ばれる (TTL内)。TTL 経過後は再 fetch
+- `ttlMs: 0` / 負数 / NaN は `TakasumiBotKitConfigError`
 - id 検索が正しく動作すること
 - id 不存在時に ValidationError (STOCK_NOT_FOUND) が throw されること (q2)
 - price() が最新要素 (末尾) を返すこと、空配列で null を返すこと (q3)

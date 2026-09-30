@@ -88,6 +88,20 @@
 
 ---
 
+## 実装フェーズで確定した事項 (未解決ではなく確定事項)
+
+実装時に Plan 段階の決定をより具体化した点。いずれも「未解決」ではなく確定済み。
+
+1. **Stock キャッシュの既定**: q13 (ttl_60) は「TTL 60秒」を維持しつつ、**既定は無効・オプション有効**に確定。
+   `basicConfig.stockCache: false | { ttlMs?: number }` で、`ttlMs <= 0` は `TakasumiBotKitConfigError` (無効扱いにはしない)。
+2. **bigint パース方式 A**: `response.json()` は使わず `response.text()` → 独自 JSON スキャナ (安全整数超えの整数のみ bigint) → zod 検証。
+3. **required の扱い**: OpenAPI は `required` を宣言していないが、SPEC §14 の公開型イメージに従いドキュメント化済みプロパティは required として検証する。未知フィールドは `.passthrough()` で保持。
+4. **single-flight**: キャッシュ有効時の同時未ヒットは任意実装だったが、in-flight Promise 共有方式で採用。
+5. **相対時刻表記**: `formatTimestamp(..., { format: 'relative' })` は `Intl.RelativeTimeFormat` に委譲するため、日本語の 0 秒差分は「今」(docs 初版の例示「たった今」ではなく Intl の出力)。
+6. **`formatTimestamp` の `'custom'` 形式**: HELPERS.md に「将来拡張」として記載されていたが書式仕様が無いため未実装。`'iso' | 'locale' | 'relative'` のみ提供。
+
+---
+
 ## 現状
 
 なし — 全て解決済み。上記決定を各ドキュメントに反映済み。

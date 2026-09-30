@@ -3,7 +3,7 @@
 ## 想定ディレクトリツリー
 
 ```
-takasumibot-toolkit/
+takasumibot-kit/
 ├── src/
 │   ├── index.ts                 # public entry, createKitClient, re-exports
 │   ├── client/
@@ -13,6 +13,8 @@ takasumibot-toolkit/
 │   │   └── types.ts             # KitClient 型, Logger 型等
 │   ├── api/
 │   │   ├── fetcher.ts           # 共通 fetch ラッパー (timeout, headers, retry, zod)
+│   │   ├── paths.ts             # OpenAPI path テンプレート + プレースホルダ展開
+│   │   ├── httpError.ts         # HttpError 生成, code/requestId ベストエフォート抽出
 │   │   ├── getGiftInfo.ts
 │   │   ├── getTaxInfo.ts
 │   │   ├── getShardInfo.ts
@@ -28,6 +30,7 @@ takasumibot-toolkit/
 │   │   ├── getStatus.ts
 │   │   └── index.ts             # api 関数 re-export
 │   ├── stock/
+│   │   ├── cache.ts             # Stock 一覧キャッシュ (既定無効・オプション有効, single-flight)
 │   │   ├── builder.ts           # getStock().id(id) ビルダー
 │   │   ├── getStockInfoById.ts
 │   │   ├── getStockPriceById.ts
@@ -74,11 +77,13 @@ takasumibot-toolkit/
 │   │   ├── status.ts
 │   │   └── index.ts
 │   ├── generated/
-│   │   ├── api.ts               # openapi-typescript 生成物 (gitignore するかコミットするかは方針)
+│   │   ├── openapi.ts           # openapi-typescript 生成物 (コミット対象)
 │   │   └── README.md            # 生成方法メモ
 │   └── internal/
 │       ├── logger.ts            # no-op logger, logger 作成ヘルパー
+│       ├── json.ts              # bigint 対応 JSON パーサ (方式 A: text → 独自スキャナ)
 │       ├── url.ts               # URL 結合, 末尾スラッシュ除去ユーティリティ
+│       ├── validate.ts          # 引数バリデーション (gift id / 非空文字 / history limit)
 │       └── sleep.ts             # sleep ユーティリティ
 ├── docs/
 │   ├── SPEC.md
@@ -170,7 +175,7 @@ takasumibot-toolkit/
   - AbortSignal.timeout によるタイムアウト
   - fetch 呼び出し、NetworkError/TimeoutError 変換
   - status チェック、HttpError 生成
-  - JSON パース、ParseError 生成
+  - `response.text()` → 独自 JSON パース (bigint 対応)、ParseError 生成
   - zod 検証、ParseError 生成
   - withRetry でラップ
 - 型: `fetcher<T>(path: string, options: { method, schema: ZodSchema<T> }): Promise<T>`
@@ -186,8 +191,8 @@ takasumibot-toolkit/
 ### src/stock/ (q1,q2,q3,q13解決)
 
 - Stock 導出ロジック
-- `builder.ts`: `getStock().id(id)` ビルダー。内部で `getStockList` を呼び出し、TTL60秒キャッシュ利用
-- `cache.ts`: StockListキャッシュ (data, expiresAt, ttlMs=60000) (q13解決)
+- `builder.ts`: `getStock().id(id)` ビルダー。内部で `getStockList` を呼び出し、キャッシュ利用 (キャッシュは既定無効)
+- `cache.ts`: StockListキャッシュ (data, expiresAt, ttlMs=60000既定)。`stockCache` 指定時のみ有効、single-flight 付き (q13解決)
 - 各個別関数は `getStockList` を利用し、検索・加工。price()は `bigint | null` を返す (q3)
 - pricesは末尾が最新確定 (q1)、id不存在はValidationError(STOCK_NOT_FOUND)確定 (q2)
 
@@ -221,10 +226,11 @@ takasumibot-toolkit/
 - 5xx時のパース失敗はHttpError優先 (q17)
 - `index.ts` で一括 export
 
-### src/generated/api.ts
+### src/generated/openapi.ts
 
 - `openapi-typescript` で生成された型
-- 生成コマンド例: `npx openapi-typescript TakasumiBOT-OpenAPI-Document.json -o src/generated/api.ts`
+- 生成コマンド: `npm run generate:types`
+  (= `openapi-typescript TakasumiBOT-OpenAPI-Document.json -o src/generated/openapi.ts`)
 - git 管理方針: コミットするか .gitignore するかはプロジェクト方針。本設計ではコミットを推奨 (レビュー容易、CI で再生成確認)
 
 ### src/internal/
@@ -243,7 +249,7 @@ takasumibot-toolkit/
 ### ルート設定ファイル
 
 - `package.json`:
-  - name: `takasumibot-toolkit`
+  - name: `takasumibot-kit`
   - type: module? tsup で ESM+CJS 両対応のため、package.json は ESM 推奨
   - scripts: `build` (tsup), `test` (vitest), `lint` (eslint), `format` (prettier), `typecheck` (tsc --noEmit), `generate` (openapi-typescript)
   - dependencies: `zod`
@@ -254,8 +260,8 @@ takasumibot-toolkit/
 - `tsconfig.json`: strict true, noImplicitAny, etc
 - `tsup.config.ts`: entry src/index.ts, format ['esm','cjs'], dts true, sourcemap true
 - `vitest.config.ts`: environment node, coverage
-- `.eslintrc.cjs`: typescript-eslint
-- `.prettierrc`: 標準設定
+- `eslint.config.mjs`: ESLint flat config (typescript-eslint + eslint-config-prettier)
+- `.prettierrc.json` / `.prettierignore`: 標準設定
 
 ## ビルド成果物
 
@@ -291,7 +297,7 @@ index.ts
 ```
 
 - 循環依存禁止
-- api/ は errors/, retry/, schemas/ に依存
+- api/ は errors/, retry/, schemas/, internal/ に依存
 - stock/ は api/getStockList, helpers, errors に依存
 - helpers/ は errors のみに依存 (純粋関数だがバリデーションで ValidationError を使用)
 
