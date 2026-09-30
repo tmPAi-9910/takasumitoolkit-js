@@ -196,7 +196,8 @@ describe('takasumibot-kit comprehensive test suite', () => {
 
     it('should handle null and undefined values', () => {
       const table = toMarkdownTable([{ a: null, b: undefined, c: 'value' }]);
-      expect(table).toContain('| | | value |');
+      // null / undefined become empty cells, so each renders as "|  |" (two spaces).
+      expect(table).toBe(['| a | b | c |', '| --- | --- | --- |', '|  |  | value |'].join('\n'));
     });
 
     it('should support custom headers', () => {
@@ -209,13 +210,13 @@ describe('takasumibot-kit comprehensive test suite', () => {
     });
 
     it('should support column alignment', () => {
+      // align is applied per column, so the rows need one column per alignment entry.
       const table = toMarkdownTable(
-        [{ a: 1 }],
+        [{ a: 1, b: 2, c: 3 }],
         { align: ['left', 'center', 'right'] }
       );
-      expect(table).toContain(':---');
-      expect(table).toContain(':---:');
-      expect(table).toContain('---:');
+      const lines = table.split('\n');
+      expect(lines[1]).toBe('| :--- | :---: | ---: |');
     });
 
     it('should handle bigint values', () => {
@@ -503,29 +504,69 @@ describe('takasumibot-kit comprehensive test suite', () => {
     });
 
     it('should create TakasumiBotKitHttpError', () => {
-      const error = new TakasumiBotKitHttpError(404, 'Not Found', 'body');
+      const error = new TakasumiBotKitHttpError({
+        status: 404,
+        statusText: 'Not Found',
+        url: 'https://api.takasumibot.com/v3/gift/Abc123Xyz0',
+        method: 'GET',
+        rawBody: 'body',
+      });
       expect(error).toBeInstanceOf(TakasumiBotKitError);
       expect(error.status).toBe(404);
+      expect(error.statusText).toBe('Not Found');
+      expect(error.rawBody).toBe('body');
+      expect(error.retryable).toBe(false);
+      expect(error.message).toContain('HTTP 404 Not Found');
     });
 
     it('should create TakasumiBotKitNetworkError', () => {
-      const error = new TakasumiBotKitNetworkError('Network failed');
+      const error = new TakasumiBotKitNetworkError('Network failed', {
+        url: 'https://api.takasumibot.com/v3/tax',
+        method: 'GET',
+      });
       expect(error).toBeInstanceOf(TakasumiBotKitError);
+      expect(error.message).toBe('Network failed');
+      expect(error.url).toBe('https://api.takasumibot.com/v3/tax');
+      expect(error.retryable).toBe(true);
     });
 
     it('should create TakasumiBotKitTimeoutError', () => {
-      const error = new TakasumiBotKitTimeoutError(5000);
+      const error = new TakasumiBotKitTimeoutError({
+        timeoutMs: 5000,
+        url: 'https://api.takasumibot.com/v3/tax',
+        method: 'GET',
+      });
       expect(error).toBeInstanceOf(TakasumiBotKitError);
+      expect(error.timeoutMs).toBe(5000);
+      expect(error.message).toContain('5000ms');
     });
 
     it('should create TakasumiBotKitRetryLimitError', () => {
-      const error = new TakasumiBotKitRetryLimitError(3);
+      const context = { url: 'https://api.takasumibot.com/v3/tax', method: 'GET' };
+      const lastError = new TakasumiBotKitNetworkError('Network failed', context);
+      const error = new TakasumiBotKitRetryLimitError({
+        lastError,
+        attempts: 4,
+        maxRetries: 3,
+        ...context,
+      });
       expect(error).toBeInstanceOf(TakasumiBotKitError);
+      expect(error.maxRetries).toBe(3);
+      expect(error.lastError).toBe(lastError);
+      expect(error.cause).toBe(lastError);
     });
 
     it('should create TakasumiBotKitResponseParseError', () => {
-      const error = new TakasumiBotKitResponseParseError('Invalid JSON');
+      const error = new TakasumiBotKitResponseParseError('Invalid JSON', {
+        url: 'https://api.takasumibot.com/v3/tax',
+        method: 'GET',
+        status: 200,
+        rawBody: '{not json',
+      });
       expect(error).toBeInstanceOf(TakasumiBotKitError);
+      expect(error.status).toBe(200);
+      expect(error.rawBody).toBe('{not json');
+      expect(error.retryable).toBe(false);
     });
   });
 
