@@ -1,3 +1,5 @@
+/* eslint-disable */
+
 /**
  * Comprehensive test suite for takasumibot-kit
  * Tests all exported functions and client methods in a single file
